@@ -14,14 +14,15 @@ try:
     print("Turning MOSFET OFF...")
     GPIO.output(CONTROL_PIN, GPIO.LOW)   # Low = OFF
     time.sleep(5)
-'''
+    '''
     # Optional: PWM example for dimming (e.g., LED strip)
     pwm = GPIO.PWM(CONTROL_PIN, 1000)    # 1kHz frequency (module supports up to ~1kHz)
     pwm.start(0)                         # Start at 0% duty
     for duty in range(0, 101, 5):        # Fade in
         pwm.ChangeDutyCycle(duty)
         time.sleep(0.1)
-    pwm.stop()'''
+    pwm.stop()
+    '''
 
 finally:
     GPIO.cleanup()                       # Clean up on exit
