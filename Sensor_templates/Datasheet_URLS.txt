@@ -1,0 +1,17 @@
+DS18B20 Temperature Sensor: 
+Datasheet - https://www.analog.com/media/en/technical-documentation/data-sheets/ds18b20.pdf
+
+HTS221 Air Temperature and Humidity Sensor: 
+Info - https://learn.adafruit.com/adafruit-hts221-temperature-humidity-sensor/python-circuitpython
+Datasheet - https://cdn-learn.adafruit.com/downloads/pdf/adafruit-hts221-temperature-humidity-sensor.pdf
+
+Adafruit STEMMA Soil Sensor (note, seesaw): 
+Info - https://learn.adafruit.com/adafruit-stemma-soil-sensor-i2c-capacitive-moisture-sensor/python-circuitpython-test
+Datasheet - https://cdn-learn.adafruit.com/downloads/pdf/adafruit-seesaw-atsamd09-breakout.pdf
+More Info - https://docs.cirkitdesigner.com/component/2aec4aab-9baa-66ca-dc3a-28f10bfe784d/adafruit-stemma-soil-sensor
+Product Datasheet - https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/698/4026_Web.pdf
+
+DRF Robot Gravity Mosfet Power Controller:
+Datasheet - https://media.digikey.com/pdf/Data%20Sheets/DFRobot%20PDFs/DFR0457_Web.pdf
+Info - https://wiki.dfrobot.com/dfr0457/
+Info - https://www.dfrobot.com/product-1567.html
