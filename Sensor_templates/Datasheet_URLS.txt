@@ -15,3 +15,6 @@ DRF Robot Gravity Mosfet Power Controller:
 Datasheet - https://media.digikey.com/pdf/Data%20Sheets/DFRobot%20PDFs/DFR0457_Web.pdf
 Info - https://wiki.dfrobot.com/dfr0457/
 Info - https://www.dfrobot.com/product-1567.html
+
+Raspberry Pi 4B:
+Pinout - https://www.etechnophiles.com/raspberry-pi-4-gpio-pinout-specifications-and-schematic/
