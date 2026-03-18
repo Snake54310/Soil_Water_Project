@@ -1,5 +1,6 @@
 DS18B20 Temperature Sensor: 
 Datasheet - https://www.analog.com/media/en/technical-documentation/data-sheets/ds18b20.pdf
+W1Thermsensor info - https://pypi.org/project/w1thermsensor/
 
 HTS221 Air Temperature and Humidity Sensor: 
 Info - https://learn.adafruit.com/adafruit-hts221-temperature-humidity-sensor/python-circuitpython
