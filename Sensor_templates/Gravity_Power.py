@@ -3,7 +3,7 @@ import time
 
 # Set up GPIO
 GPIO.setmode(GPIO.BCM)          # or GPIO.BOARD for physical pin numbers
-CONTROL_PIN = 22                # Change to your chosen GPIO pin
+CONTROL_PIN = 22                # Change to your chosen GPIO pin. currently GPIO 22 (pin 15)
 GPIO.setup(CONTROL_PIN, GPIO.OUT)
 
 try:
