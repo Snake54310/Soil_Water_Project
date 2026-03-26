@@ -17,9 +17,9 @@ class Input_Output_Operations:
 
         # ====================== STEMMA SOIL SENSOR CALIBRATION ======================
         self.DRY_1 = 300        # raw value for sensor at 0x36 when completely dry
-        self.WET_1 = 1800       # raw value for sensor at 0x36 when fully saturated
+        self.WET_1 = 1016      # raw value for sensor at 0x36 when fully saturated
         self.DRY_2 = 300        # raw value for sensor at 0x37 when completely dry
-        self.WET_2 = 1800       # raw value for sensor at 0x37 when fully saturated
+        self.WET_2 = 1016      # raw value for sensor at 0x37 when fully saturated
         # =============================================================================
 
     def detect_stemma(self):
@@ -72,26 +72,43 @@ class Input_Output_Operations:
         return
 
     def getGroundMoisture(self):
-        """Returns averaged calibrated soil moisture percentage (0-100)."""
+        """Returns calibrated soil moisture percentage (0-60) where:
+        raw 300 ≈ 0%
+        raw 1016 ≈ 60% (sensor's practical maximum)"""
         try:
             i2c_bus = board.I2C()
+
+            # Sensor 1 at 0x36
             ss1 = Seesaw(i2c_bus, addr=0x36)
             raw1 = ss1.moisture_read()
+
+            # Sensor 2 at 0x37
             ss2 = Seesaw(i2c_bus, addr=0x37)
             raw2 = ss2.moisture_read()
 
-            percent1 = ((raw1 - self.DRY_1) / (self.WET_1 - self.DRY_1)) * 100
-            percent2 = ((raw2 - self.DRY_2) / (self.WET_2 - self.DRY_2)) * 100
+            # Calibration constants
+            DRY_RAW = 300  # Update this after measuring completely dry soil
+            MAX_RAW = 1016  # Sensor's practical maximum ≈ 60%
 
-            percent1 = max(0, min(100, percent1))
-            percent2 = max(0, min(100, percent2))
+            def raw_to_percent(raw):
+                if raw <= DRY_RAW:
+                    return 0.0
+                elif raw >= MAX_RAW:
+                    return 60.0
+                else:
+                    # Linear mapping from 300 → 0% to 1016 → 60%
+                    return ((raw - DRY_RAW) / (MAX_RAW - DRY_RAW)) * 60.0
 
-            avg_percent = (percent1 + percent2) / 2
+            percent1 = raw_to_percent(raw1)
+            percent2 = raw_to_percent(raw2)
+
+            avg_percent = (percent1 + percent2) / 2.0
             self.soilMoisture = avg_percent
             return avg_percent
-        except Exception:
+        except Exception as e:
+            print(f"STEMMA read error: {e}")
             self.soilMoisture = 0.0
-            return 0.0   # STEMMA failed — continue (though startup check already caught this)
+            return 0.0
 
     def readAll(self, pumpTimer=5):
         GroundTemp = self.readGroundTemp()
