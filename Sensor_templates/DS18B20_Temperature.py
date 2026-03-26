@@ -1,6 +1,7 @@
 from w1thermsensor import W1ThermSensor
 # Note: this will occasionally fail.. maybe sensor does not default to 'wake' state on power?
 import RPi.GPIO as GPIO
+
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(4, GPIO.IN, pull_up_down=GPIO.PUD_UP) # GPIO 4 (pin 7) is default for w1thermsensor package
 
