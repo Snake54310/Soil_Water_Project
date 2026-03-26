@@ -21,7 +21,7 @@ def main(Input_Output):
     MIN_PULSE_S = 3.0
     MAX_PULSE_S = 30.0
 
-    pid = PID(kp=0.8, ki=0.05, kd=0.1, setpoint=MOISTURE_TARGET)
+    pid = PID(kp=0.6, ki=0.03, kd=0.05, setpoint=MOISTURE_TARGET)
 
     # State tracking
     waterings_today = 0
