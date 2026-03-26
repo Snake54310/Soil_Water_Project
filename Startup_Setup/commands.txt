@@ -1,0 +1,25 @@
+sudo nano /etc/systemd/system/watering.service
+
+       Inside this file:
+[Unit]
+Description=AI Smart Watering Controller
+After=multi-user.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/pi/Soil_Water_Project/main.py
+WorkingDirectory=/home/pi/Soil_Water_Project
+User=pi
+
+# Restart policy: Only restart on failure, but respect clean exit (code 0)
+Restart=on-failure
+RestartSec=5
+# Do NOT restart if the program exits with code 0 (sensor not detected)
+SuccessExitStatus=0
+
+[Install]
+WantedBy=multi-user.target
+
+        Finally:
+sudo systemctl daemon-reload
+sudo systemctl enable watering.service
+sudo systemctl start watering.service
