@@ -9,7 +9,7 @@ GPIO.setup(CONTROL_PIN, GPIO.OUT)
 try:
     print("Turning MOSFET ON (load powered)...")
     GPIO.output(CONTROL_PIN, GPIO.HIGH)  # High = ON (module logic: high turns MOSFET on)
-    time.sleep(5)
+    time.sleep(1)
 
     print("Turning MOSFET OFF...")
     GPIO.output(CONTROL_PIN, GPIO.LOW)   # Low = OFF
