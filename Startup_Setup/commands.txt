@@ -6,9 +6,10 @@ Description=AI Smart Watering Controller
 After=multi-user.target
 
 [Service]
-ExecStart=/usr/bin/python3 /home/pi/Soil_Water_Project/main.py
-WorkingDirectory=/home/pi/Soil_Water_Project
-User=pi
+Type=simple
+ExecStart=/usr/bin/python3 /home/snake/soil_project/Soil_Water_Project/main_Operations.py
+WorkingDirectory=/home/snake/soil_project/Soil_Water_Project/
+User=snake
 
 # Restart policy: Only restart on failure, but respect clean exit (code 0)
 Restart=on-failure
