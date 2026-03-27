@@ -24,3 +24,11 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 sudo systemctl enable watering.service
 sudo systemctl start watering.service
+
+
+	Error:
+Mar 26 19:54:52 SnakePi (thon3.13)[5530]: watering.service: Changing to the requested working directory failed: No such file or directory
+Mar 26 19:54:52 SnakePi (thon3.13)[5530]: watering.service: Failed at step CHDIR spawning /usr/bin/python3.13: No such file or directory
+Mar 26 19:54:52 SnakePi systemd[1]: watering.service: Main process exited, code=exited, status=200/CHDIR
+Mar 26 19:54:52 SnakePi systemd[1]: watering.service: Failed with result 'exit-code'.
+
