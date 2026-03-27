@@ -7,8 +7,8 @@ After=multi-user.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/snake/soil_project/Soil_Water_Project/main_Operations.py
-WorkingDirectory=/home/snake/soil_project/Soil_Water_Project/
+ExecStart=/usr/bin/python3 /home/snake/soil_project/Soil_Water_Project/Project_Code/main_Operations.py
+WorkingDirectory=/home/snake/soil_project/Soil_Water_Project/Project_Code
 User=snake
 
 # Restart policy: Only restart on failure, but respect clean exit (code 0)
