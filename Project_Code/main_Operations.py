@@ -36,7 +36,8 @@ def main(Input_Output):
     sample_count = 0
 
     # Rolling average for moisture (last 5 readings)
-    moisture_window = deque(maxlen=5)
+    MAX_MOISTURE_QUEUE = 10
+    moisture_window = deque(maxlen=MAX_MOISTURE_QUEUE)
 
     # Log file setup (unchanged)
     log_file = open('watering_log.csv', 'a', newline='')
@@ -89,7 +90,7 @@ def main(Input_Output):
 
         sensor_errors = 1 if (ground_t == 0 or air_t == 0 or humidity == 0 or soil_moisture == 0) else 0
 
-        if can_water and moisture_avg < (MOISTURE_TARGET - PUMP_THRESHOLD) and moisture_window:           # dead band on rolling avg
+        if can_water and moisture_avg < (MOISTURE_TARGET - PUMP_THRESHOLD) and len(moisture_window) == MAX_MOISTURE_QUEUE:           # dead band on rolling avg
             duty = pid.compute(moisture_avg)            # PID on rolling avg
             pulse_s = MIN_PULSE_S + duty * (MAX_PULSE_S - MIN_PULSE_S)
             pulse_s = max(MIN_PULSE_S, min(MAX_PULSE_S, pulse_s))
