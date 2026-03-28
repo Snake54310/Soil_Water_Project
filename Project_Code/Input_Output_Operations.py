@@ -16,9 +16,9 @@ class Input_Output_Operations:
         self.maxUptime = maximumUptime
 
         # ====================== STEMMA SOIL SENSOR CALIBRATION ======================
-        self.DRY_1 = 300        # raw value for sensor at 0x36 when completely dry
+        self.DRY_1 = 500        # raw value for sensor at 0x36 when completely dry
         self.WET_1 = 1016      # raw value for sensor at 0x36 when fully saturated
-        self.DRY_2 = 300        # raw value for sensor at 0x37 when completely dry
+        self.DRY_2 = 500        # raw value for sensor at 0x37 when completely dry
         self.WET_2 = 1016      # raw value for sensor at 0x37 when fully saturated
         # =============================================================================
 
@@ -87,17 +87,17 @@ class Input_Output_Operations:
             raw2 = ss2.moisture_read()
 
             # Calibration constants
-            DRY_RAW = 300  # Update this after measuring completely dry soil
+            DRY_RAW = 500  # Update this after measuring completely dry soil
             MAX_RAW = 1016  # Sensor's practical maximum ≈ 60%
 
             def raw_to_percent(raw):
                 if raw <= DRY_RAW:
                     return 0.0
                 elif raw >= MAX_RAW:
-                    return 60.0
+                    return 100.0
                 else:
-                    # Linear mapping from 300 → 0% to 1016 → 60%
-                    return ((raw - DRY_RAW) / (MAX_RAW - DRY_RAW)) * 60.0
+                    # Linear mapping from 500 → 0% to 1016 → 100%
+                    return ((raw - DRY_RAW) / (MAX_RAW - DRY_RAW)) * 100.0
 
             percent1 = raw_to_percent(raw1)
             percent2 = raw_to_percent(raw2)
