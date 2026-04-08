@@ -43,8 +43,8 @@ class Input_Output_Operations:
             self.groundTemp = temperature_in_c
             return temperature_in_c
         except Exception:
-            self.groundTemp = 0.0
-            return 0.0   # DS18B20 failed — continue anyway
+            self.groundTemp = 15.0
+            return 15.0   # DS18B20 failed — continue anyway
 
     def readHumidityAndTemp(self):
         try:
