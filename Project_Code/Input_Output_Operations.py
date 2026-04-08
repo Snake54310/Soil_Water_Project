@@ -16,9 +16,9 @@ class Input_Output_Operations:
         self.maxUptime = maximumUptime
 
         # ====================== STEMMA SOIL SENSOR CALIBRATION ======================
-        self.DRY_1 = 500        # raw value for sensor at 0x36 when completely dry
+        self.DRY_1 = 550        # raw value for sensor at 0x36 when completely dry
         self.WET_1 = 1016      # raw value for sensor at 0x36 when fully saturated
-        self.DRY_2 = 500        # raw value for sensor at 0x37 when completely dry
+        self.DRY_2 = 550        # raw value for sensor at 0x37 when completely dry
         self.WET_2 = 1016      # raw value for sensor at 0x37 when fully saturated
         # =============================================================================
 

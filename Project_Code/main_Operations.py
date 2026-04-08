@@ -46,7 +46,7 @@ def main(Input_Output):
 
     # Temperature correction parameters
     TEMP_CORRECTION_CENTER = 15.0       # degrees C at which no correction is applied
-    MOISTURE_PCT_PER_DEGREE_C = 0.015   # fractional moisture increase per degree above center
+    MOISTURE_PCT_PER_DEGREE_C = 0.016   # fractional moisture increase per degree above center
                                         # e.g. 0.015 means +1.5% capacitance per +1 degree C
                                         # correction formula: corrected = raw / (1 + rate * delta_t)
 

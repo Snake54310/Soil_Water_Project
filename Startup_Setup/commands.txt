@@ -29,4 +29,5 @@ sudo systemctl start watering.service
 sudo systemctl daemon-reload
 sudo systemctl restart watering.service
 sudo systemctl status watering.service
+sudo reboot
 
