@@ -87,7 +87,7 @@ class Input_Output_Operations:
             raw2 = ss2.moisture_read()
 
             # Calibration constants
-            DRY_RAW = 500  # Update this after measuring completely dry soil
+            DRY_RAW = 550  # Update this after measuring completely dry soil
             MAX_RAW = 1016  # Sensor's practical maximum ≈ 60%
 
             def raw_to_percent(raw):
