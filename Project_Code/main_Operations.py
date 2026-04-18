@@ -73,8 +73,8 @@ def main(Input_Output):
     MAX_GROUND_T_QUEUE = 10
     ground_t_window    = deque(maxlen=MAX_GROUND_T_QUEUE)
 
-    # ── NEW: Rolling 24h window for graded idle negative training ──
-    MAX_ROLLING_RMSE_QUEUE = 144   # 24 h × 6 cycles/min
+    # Rolling 24h window for graded idle negative training
+    MAX_ROLLING_RMSE_QUEUE = 144
     rolling_moisture       = deque(maxlen=MAX_ROLLING_RMSE_QUEUE)
 
     TEMP_CORRECTION_CENTER    = 15.0
@@ -86,7 +86,6 @@ def main(Input_Output):
     pulse_this_cycle = 0.0
     pump_on_this_cycle = 0
 
-    # Log files (unchanged)
     log_file = open('watering_log.csv', 'a', newline='')
     writer   = csv.writer(log_file)
     if log_file.tell() == 0:
@@ -149,7 +148,6 @@ def main(Input_Output):
 
         sensor_errors = 1 if (ground_t == 0 or air_t == 0 or humidity == 0 or soil_moisture == 0) else 0
 
-        # Ground temp rolling average (unchanged)
         ground_t_window.append(ground_t)
         if len(ground_t_window) >= 3:
             sorted_temps = sorted(ground_t_window)
@@ -157,12 +155,10 @@ def main(Input_Output):
         else:
             ground_t_avg = sum(ground_t_window) / len(ground_t_window)
 
-        # Temperature-corrected moisture (unchanged)
         delta_t               = ground_t_avg - TEMP_CORRECTION_CENTER
         temp_correction_factor = 1.0 + MOISTURE_PCT_PER_DEGREE_C * delta_t
         soil_moisture_corrected = soil_moisture / temp_correction_factor
 
-        # Moisture rolling average (unchanged)
         moisture_window.append(soil_moisture_corrected)
         if len(moisture_window) >= 3:
             sorted_moisture = sorted(moisture_window)
@@ -170,7 +166,6 @@ def main(Input_Output):
         else:
             moisture_avg = sum(moisture_window) / len(moisture_window)
 
-        # ── NEW: Rolling moisture for graded idle negative training ──
         rolling_moisture.append(soil_moisture_corrected)
 
         sum_air_t    += air_t
@@ -248,14 +243,42 @@ def main(Input_Output):
 
                 Input_Output.activatePump(pulse_s)
 
-                changes_writer.writerow([...])  # (same as previous version)
+                changes_writer.writerow([
+                    now_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                    round(soil_moisture, 2), round(soil_moisture_corrected, 2),
+                    round(moisture_avg, 2),  round(avg_error, 2),
+                    waterings_today,
+                    round(threshold_prob, 3), round(effective_threshold, 2),
+                    round(kp_mult, 3), round(ki_mult, 3), round(kd_mult, 3),
+                    round(pid.kp, 4),  round(pid.ki, 4),  round(pid.kd, 4),
+                    round(pulse_s, 2),
+                ])
                 changes_log_file.flush()
 
                 fire_ts = now_dt.strftime('%Y-%m-%d %H:%M:%S')
-                gain_history_writer.writerow([...])  # (same as previous version)
+                gain_history_writer.writerow([
+                    fire_ts, fire_ts,
+                    round(kp_mult, 3), round(ki_mult, 3), round(kd_mult, 3),
+                    round(pid.kp, 4),  round(pid.ki, 4),  round(pid.kd, 4),
+                    round(pulse_s, 2), round(avg_error, 4),
+                    waterings_today,   round(threshold_prob, 3),
+                ])
                 gain_history_log_file.flush()
 
-                event_buffer.append({ ... })  # (same as previous version)
+                event_buffer.append({
+                    'fire_time':         now,
+                    'fire_timestamp':    fire_ts,
+                    'feature_seq':       seq_tensor.clone().detach(),
+                    'avg_error_at_fire': avg_error,
+                    'kp_mult':           kp_mult,
+                    'ki_mult':           ki_mult,
+                    'kd_mult':           kd_mult,
+                    'kp':                pid.kp,
+                    'ki':                pid.ki,
+                    'kd':                pid.kd,
+                    'pulse_s':           pulse_s,
+                    'moisture_readings': [],
+                })
 
                 last_watering_time = now
                 waterings_today   += 1
@@ -272,30 +295,57 @@ def main(Input_Output):
         for event in event_buffer:
             event['moisture_readings'].append(soil_moisture_corrected)
 
-        # 24h delayed training (unchanged)
         completed = [e for e in event_buffer if (now - e['fire_time']) >= 86400]
         for event in completed:
-            # ... (identical to previous version)
-            pass
+            if event['feature_seq'] is None or len(event['moisture_readings']) == 0:
+                continue
+
+            readings   = event['moisture_readings']
+            rmse       = math.sqrt(
+                sum((r - 50.0) ** 2 for r in readings) / len(readings))
+            mean_error = sum(r - 50.0 for r in readings) / len(readings)
+
+            target_prob = 1.0 if rmse < RMSE_GOOD_THRESHOLD else 0.0
+
+            t_loss = online_update_threshold(
+                event['feature_seq'], target_prob,
+                model_threshold, optimizer_threshold,
+                pos_weight=10.0,
+            )
+
+            g_info = online_update_gain_scheduler(
+                event['feature_seq'], event['avg_error_at_fire'],
+                model_gains, optimizer_gains,
+            )
+
+            training_writer.writerow([
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                event['fire_timestamp'],
+                round(rmse, 4),
+                round(mean_error, 4),
+                round(target_prob, 1),
+                round(t_loss, 4),
+                round(g_info['target_mult'], 3),
+                round(g_info['loss'], 4),
+            ])
+            training_log_file.flush()
+
         event_buffer = [e for e in event_buffer if (now - e['fire_time']) < 86400]
 
-        # ── GRADED IDLE NEGATIVE TRAINING (your new logic) ──
         if not allow_water and seq_tensor is not None and sensor_errors == 0:
             idle_cycle_counter += 1
             if idle_cycle_counter >= IDLE_TRAIN_CYCLES and len(rolling_moisture) >= 30:
                 idle_cycle_counter = 0
 
-                # Compute rolling RMSE over the last ~24 h window
                 readings = list(rolling_moisture)
                 rmse = math.sqrt(sum((r - 50.0) ** 2 for r in readings) / len(readings))
 
-                # Graded pos_weight: stronger negative signal when RMSE is low
                 if rmse < 1.5:
-                    pos_weight = 2.5      # very stable → strongly reinforce "do not water"
+                    pos_weight = 2.5
                 elif rmse > 3.0:
-                    pos_weight = 0.5      # drifted → much weaker negative signal
+                    pos_weight = 0.5
                 else:
-                    pos_weight = 1.0 + (3.0 - rmse) * 0.5   # smooth linear interpolation
+                    pos_weight = 1.0 + (3.0 - rmse) * 0.5
 
                 online_update_threshold(
                     seq_tensor, 0.0,
@@ -303,8 +353,18 @@ def main(Input_Output):
                     pos_weight=pos_weight,
                 )
 
-        # Unified log row (unchanged)
-        writer.writerow([ ... ])  # (same as previous version)
+        writer.writerow([
+            now_dt.strftime('%Y-%m-%d %H:%M:%S'),
+            round(air_avg, 2),   round(ground_avg, 2), round(hum_avg, 2),
+            round(air_t, 2),     round(ground_t, 2),   round(humidity, 2),
+            round(soil_moisture, 2), round(soil_moisture_corrected, 2),
+            round(moisture_avg, 2),  round(ground_t_avg, 2),
+            round(avg_error, 2),
+            waterings_today,
+            MAX_WATERINGS_PER_DAY - waterings_today,
+            round(minutes_until, 2),
+            round(pulse_this_cycle, 2), pump_on_this_cycle, sensor_errors,
+        ])
         log_file.flush()
 
         print(f"{now_dt.strftime('%H:%M:%S')} | Soil: {soil_moisture:5.1f}% "
@@ -312,7 +372,7 @@ def main(Input_Output):
               f"Thresh: {threshold_prob:.3f} | Gate: {effective_threshold:.2f}% | "
               f"Gains: Kp={pid.kp:.4f} Ki={pid.ki:.4f} Kd={pid.kd:.4f} | "
               f"Avg err: {avg_error:+5.1f}% | Waterings today: {waterings_today}/5 | "
-              f"Idle RMSE: {rmse:.2f} (pos_weight={pos_weight:.1f})")   # ← helpful debug
+              f"Idle RMSE: {rmse:.2f} (pos_weight={pos_weight:.1f})")
 
         pulse_this_cycle = 0.0
         pump_on_this_cycle = 0
