@@ -28,6 +28,9 @@ def setup():
     return Input_Output
 
 def main(Input_Output):
+    # ── FIX: Declare globals so Python sees the module-level variables ──
+    global event_buffer, feature_history, ground_t_avg
+
     MOISTURE_TARGET = 50.0
 
     MAX_WATERINGS_PER_DAY = 5
@@ -73,7 +76,6 @@ def main(Input_Output):
     MAX_GROUND_T_QUEUE = 10
     ground_t_window    = deque(maxlen=MAX_GROUND_T_QUEUE)
 
-    # Rolling 24h window for graded idle negative training
     MAX_ROLLING_RMSE_QUEUE = 144
     rolling_moisture       = deque(maxlen=MAX_ROLLING_RMSE_QUEUE)
 
