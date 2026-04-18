@@ -28,7 +28,6 @@ def setup():
     return Input_Output
 
 def main(Input_Output):
-    # ── FIX: Declare globals so Python sees the module-level variables ──
     global event_buffer, feature_history, ground_t_avg
 
     MOISTURE_TARGET = 50.0
@@ -137,6 +136,10 @@ def main(Input_Output):
     while True:
         now_dt = datetime.now()
         now    = time.time()
+
+        # ── FIX: Safe defaults so print() never crashes ──
+        rmse = 0.0
+        pos_weight = 1.0
 
         if now_dt.date() != last_midnight:
             waterings_today = 0
@@ -303,8 +306,7 @@ def main(Input_Output):
                 continue
 
             readings   = event['moisture_readings']
-            rmse       = math.sqrt(
-                sum((r - 50.0) ** 2 for r in readings) / len(readings))
+            rmse       = math.sqrt(sum((r - 50.0) ** 2 for r in readings) / len(readings))
             mean_error = sum(r - 50.0 for r in readings) / len(readings)
 
             target_prob = 1.0 if rmse < RMSE_GOOD_THRESHOLD else 0.0
