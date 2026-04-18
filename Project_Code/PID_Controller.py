@@ -1,7 +1,7 @@
 # PID_Controller.py
 # Pure PID controller for the AI-Regulated Smart Watering System
-# Used by main script to compute pump pulse duty based on soil moisture error.
-# No hard-coded intelligence — pure feedback only (LSTM will override gains later).
+# Used by main script to compute pump pulse duty (0.0-1.0) based on soil moisture error.
+# No hard-coded intelligence — pure feedback only (LSTM gain scheduler will override gains later).
 
 import time
 

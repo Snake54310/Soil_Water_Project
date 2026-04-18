@@ -72,9 +72,9 @@ class Input_Output_Operations:
         return
 
     def getGroundMoisture(self):
-        """Returns calibrated soil moisture percentage (0-60) where:
-        raw 300 ≈ 0%
-        raw 1016 ≈ 60% (sensor's practical maximum)"""
+        """Returns calibrated soil moisture percentage (0-100) where:
+        raw ~550 ≈ 0%
+        raw 1016 ≈ 100% (sensor's practical maximum observed in wet conditions)."""
         try:
             i2c_bus = board.I2C()
 
@@ -88,7 +88,7 @@ class Input_Output_Operations:
 
             # Calibration constants
             DRY_RAW = 550  # Update this after measuring completely dry soil
-            MAX_RAW = 1016  # Sensor's practical maximum ≈ 60%
+            MAX_RAW = 1016  # Sensor's practical maximum ≈ 100% on our scale
 
             def raw_to_percent(raw):
                 if raw <= DRY_RAW:
@@ -96,7 +96,7 @@ class Input_Output_Operations:
                 elif raw >= MAX_RAW:
                     return 100.0
                 else:
-                    # Linear mapping from 500 → 0% to 1016 → 100%
+                    # Linear mapping from 550 → 0% to 1016 → 100%
                     return ((raw - DRY_RAW) / (MAX_RAW - DRY_RAW)) * 100.0
 
             percent1 = raw_to_percent(raw1)
