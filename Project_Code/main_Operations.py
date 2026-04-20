@@ -215,22 +215,28 @@ def main(Input_Output):
             and threshold_prob > 0.5
         )
 
+        # === GAIN SCHEDULER + PID RESET (now matches context prompt exactly) ===
+        # Always reset to base gains every cycle
+        pid.kp = base_kp
+        pid.ki = base_ki
+        pid.kd = base_kd
         kp_mult = ki_mult = kd_mult = 1.0
+
         if allow_water:
             with torch.no_grad():
-                raw_multipliers = model_gains(inference_tensor).squeeze()   # [0, 2]
-            # NEW: damping = 0.5
-            kp_mult = 1.0 + 0.5 * (raw_multipliers[0].item() - 1.0)
-            ki_mult = 1.0 + 0.5 * (raw_multipliers[1].item() - 1.0)
-            kd_mult = 1.0 + 0.5 * (raw_multipliers[2].item() - 1.0)
+                raw = model_gains(inference_tensor).squeeze()   # raw ∈ [0, 2]
+            kp_raw = raw[0].item()
+            ki_raw = raw[1].item()
+            kd_raw = raw[2].item()
+
+            kp_mult = 1.0 + 0.5 * (kp_raw - 1.0)
+            ki_mult = 1.0 + 0.5 * (ki_raw - 1.0)
+            kd_mult = 1.0 + 0.5 * (kd_raw - 1.0)
 
             pid.kp = base_kp * kp_mult
             pid.ki = base_ki * ki_mult
             pid.kd = base_kd * kd_mult
-        else:
-            pid.kp = base_kp
-            pid.ki = base_ki
-            pid.kd = base_kd
+        # else: gains remain at base (neutral) — exactly as documented
 
         if allow_water and len(moisture_window) == MAX_MOISTURE_QUEUE and seq_tensor is not None:
             duty    = pid.compute(moisture_avg)
@@ -273,12 +279,9 @@ def main(Input_Output):
                     'fire_timestamp':    fire_ts,
                     'feature_seq':       seq_tensor.clone().detach(),
                     'avg_error_at_fire': avg_error,
-                    'kp_mult':           kp_mult,      # store the actual used multiplier
+                    'kp_mult':           kp_mult,
                     'ki_mult':           ki_mult,
                     'kd_mult':           kd_mult,
-                    'kp':                pid.kp,
-                    'ki':                pid.ki,
-                    'kd':                pid.kd,
                     'pulse_s':           pulse_s,
                     'moisture_readings': [],
                 })
@@ -300,26 +303,36 @@ def main(Input_Output):
 
         completed = [e for e in event_buffer if (now - e['fire_time']) >= 86400]
         for event in completed:
-            if event['feature_seq'] is None or len(event['moisture_readings']) == 0:
+            if len(event['moisture_readings']) == 0:
                 continue
 
             readings   = event['moisture_readings']
             rmse       = math.sqrt(sum((r - 50.0) ** 2 for r in readings) / len(readings))
             mean_error = sum(r - 50.0 for r in readings) / len(readings)
 
-            # NEW residual target as requested
-            previous_mult = event.get('kp_mult', 1.0)
-            target_mult = previous_mult - math.tanh(mean_error / 5.0)
-            target_mult = max(0.5, min(1.5, target_mult))   # clip to new range
+            G = 1.0 / (1.0 + rmse)
+
+            if event.get('pulse_s', 0) > 0.1:
+                target_prob = 1.0
+                pos_weight  = 10.0 * G
+            else:
+                target_prob = 0.0
+                pos_weight  = 1.0 * G
 
             t_loss = online_update_threshold(
-                event['feature_seq'], 0.0 if event.get('pulse_s', 0) == 0 else 1.0,
+                event['feature_seq'], target_prob,
                 model_threshold, optimizer_threshold,
-                pos_weight=10.0,
+                pos_weight=pos_weight,
             )
 
+            # Residual learning — correct damping inversion
+            previous_mult = event.get('kp_mult', 1.0)          # damped final_mult
+            target_mult   = previous_mult - math.tanh(mean_error / 5.0)
+            target_mult   = max(0.5, min(1.5, target_mult))    # desired damped
+            target_raw    = 1.0 + 2.0 * (target_mult - 1.0)    # ← INVERT to raw [0,2]
+
             g_info = online_update_gain_scheduler(
-                event['feature_seq'], target_mult,   # residual target
+                event['feature_seq'], target_raw,   # now passes raw target
                 model_gains, optimizer_gains,
             )
 
@@ -328,7 +341,7 @@ def main(Input_Output):
                 event['fire_timestamp'],
                 round(rmse, 4),
                 round(mean_error, 4),
-                round(1.0 if event.get('pulse_s', 0) > 0 else 0.0, 1),
+                round(target_prob, 1),
                 round(t_loss, 4),
                 round(g_info['target_mult'], 3),
                 round(g_info['loss'], 4),
@@ -348,10 +361,10 @@ def main(Input_Output):
 
         writer.writerow([
             now_dt.strftime('%Y-%m-%d %H:%M:%S'),
-            round(air_avg, 2),   round(ground_avg, 2), round(hum_avg, 2),
-            round(air_t, 2),     round(ground_t, 2),   round(humidity, 2),
+            round(air_avg, 2), round(ground_avg, 2), round(hum_avg, 2),
+            round(air_t, 2), round(ground_t, 2), round(humidity, 2),
             round(soil_moisture, 2), round(soil_moisture_corrected, 2),
-            round(moisture_avg, 2),  round(ground_t_avg, 2),
+            round(moisture_avg, 2), round(ground_t_avg, 2),
             round(avg_error, 2),
             waterings_today,
             MAX_WATERINGS_PER_DAY - waterings_today,

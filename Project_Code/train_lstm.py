@@ -18,13 +18,7 @@ SENSITIVITY_SCALE  = 5.0
 RMSE_GOOD_THRESHOLD = 2.0
 LOOKAHEAD_ROWS     = 144
 
-def compute_gain_target(avg_error):
-    target = 1.0 - math.tanh(avg_error / SENSITIVITY_SCALE)
-    target = max(0.1, min(2.0, target))
-    return torch.tensor([target, target, target], dtype=torch.float32)
-
 def online_update_threshold(feature_seq, target_prob, model, optimizer, pos_weight=10.0):
-    """Already fixed version - works correctly"""
     model.train()
     optimizer.zero_grad()
     pred = model(feature_seq)                    # shape (1, 1)
@@ -39,11 +33,16 @@ def online_update_threshold(feature_seq, target_prob, model, optimizer, pos_weig
     torch.save(model.state_dict(), "lstm_threshold.pth")
     return loss.item()
 
-def online_update_gain_scheduler(feature_seq, avg_error, model, optimizer):
+def online_update_gain_scheduler(feature_seq, value, model, optimizer):
+    """value is now the pre-computed *raw* target multiplier [0, 2] for the LSTM output.
+    (Residual is computed in damped space in main_Operations.py, then inverted here.)"""
     model.train()
     optimizer.zero_grad()
     pred = model(feature_seq).squeeze()
-    target = compute_gain_target(avg_error)
+
+    # value is guaranteed to be the raw target [0, 2]
+    target = torch.tensor([value, value, value], dtype=torch.float32)
+
     loss = nn.MSELoss()(pred, target)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -52,13 +51,13 @@ def online_update_gain_scheduler(feature_seq, avg_error, model, optimizer):
     torch.save(model.state_dict(), "lstm_gain_scheduler.pth")
     return {
         'loss': loss.item(),
-        'target_mult': target[0].item(),
+        'target_mult': value,          # now logs the raw target the model actually saw
         'predicted_kp': pred[0].item(),
         'predicted_ki': pred[1].item(),
         'predicted_kd': pred[2].item()
     }
 
-# ====================== OFFLINE TRAINING (now fixed) ======================
+# ====================== OFFLINE TRAINING ======================
 class WateringDataset(Dataset):
     def __init__(self, csv_path):
         df = pd.read_csv(csv_path)
@@ -95,11 +94,13 @@ class GainSchedulerDataset(Dataset):
                     'avg_error_since_last', 'waterings_today', 'minutes_until_next_allowed'
                 ]].values.astype(np.float32)
                 avg_error = df.iloc[i]['avg_error_since_last']
-                target = compute_gain_target(avg_error)
+                # For offline, use 1.0 as baseline (no previous_mult stored)
+                target = 1.0 - math.tanh(avg_error / SENSITIVITY_SCALE)
+                target = max(0.1, min(2.0, target))
                 window = df.iloc[i:i+LOOKAHEAD_ROWS]['soil_moisture_corrected'].values
                 weight = 1.0 / (1.0 + np.sqrt(np.mean((window - 50.0)**2))) if len(window) > 0 else 1.0
                 self.features.append(x)
-                self.targets.append(target)
+                self.targets.append(torch.tensor([target, target, target], dtype=torch.float32))
                 self.weights.append(weight)
 
     def __len__(self):
@@ -127,13 +128,10 @@ def train_threshold_model(csv_path, epochs=80):
         total_loss = 0
         for x, y in dataloader:
             optimizer.zero_grad()
-            pred = model(x)                     # shape (batch, 1)
-            target = y.unsqueeze(1)             # shape (batch, 1)
-
-            # Per-sample weighting (fixed version)
+            pred = model(x)
+            target = y.unsqueeze(1)
             weights = torch.full_like(target, 1.0)
             weights[target == 1.0] = pos_weight
-
             loss = F.binary_cross_entropy(pred, target, weight=weights)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -179,5 +177,5 @@ def train_gain_scheduler(csv_path, epochs=40):
     print("Gain scheduler training complete.")
 
 if __name__ == "__main__":
-    train_threshold_model('test_watering_log.csv', epochs=80)
-    train_gain_scheduler('test_watering_log.csv', epochs=40)
+    train_threshold_model('watering_log.csv', epochs=80)
+    train_gain_scheduler('watering_log.csv', epochs=40)
