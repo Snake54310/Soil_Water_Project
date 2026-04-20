@@ -78,7 +78,7 @@ def main(Input_Output):
     rolling_moisture       = deque(maxlen=MAX_ROLLING_RMSE_QUEUE)
 
     TEMP_CORRECTION_CENTER    = 15.0
-    MOISTURE_PCT_PER_DEGREE_C = 0.016
+    MOISTURE_PCT_PER_DEGREE_C = 0.012
 
     IDLE_TRAIN_CYCLES  = 1200
     idle_cycle_counter = IDLE_TRAIN_CYCLES - 1
