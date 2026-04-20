@@ -1,0 +1,2 @@
+timestamp,fire_timestamp,kp_mult,ki_mult,kd_mult,kp_actual,ki_actual,kd_actual,pulse_seconds,avg_error_at_fire,waterings_today,threshold_prob
+2026-04-18 20:45:41,2026-04-18 20:45:41,1.0,1.0,1.0,0.009,0.0015,0.0,2.79,0.4534,0,0.75

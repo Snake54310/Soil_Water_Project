@@ -1,0 +1,2 @@
+timestamp,soil_moisture_current,soil_moisture_corrected,soil_moisture_rolling_avg,avg_error_since_last,waterings_today,threshold_prob,effective_threshold,kp_mult,ki_mult,kd_mult,kp_current,ki_current,kd_current,pulse_seconds
+2026-04-18 20:45:41,50.0,45.33,49.44,0.45,0,0.75,49.7,1.0,1.0,1.0,0.009,0.0015,0.0,2.79
