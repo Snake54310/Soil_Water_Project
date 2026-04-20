@@ -48,10 +48,8 @@ def main(Input_Output):
     model_gains     = LSTM_GainScheduler(input_size=INPUT_SIZE)
 
     try:
-        model_threshold.load_state_dict(
-            torch.load("lstm_threshold.pth", weights_only=True, map_location='cpu'))
-        model_gains.load_state_dict(
-            torch.load("lstm_gain_scheduler.pth", weights_only=True, map_location='cpu'))
+        model_threshold.load_state_dict(torch.load("lstm_threshold.pth", weights_only=True, map_location='cpu'))
+        model_gains.load_state_dict(torch.load("lstm_gain_scheduler.pth", weights_only=True, map_location='cpu'))
         print("Loaded saved LSTM models.")
     except FileNotFoundError:
         print("WARNING: LSTM models not found. Run initialize_lstm_models.py first.")
@@ -75,6 +73,7 @@ def main(Input_Output):
     MAX_GROUND_T_QUEUE = 10
     ground_t_window    = deque(maxlen=MAX_GROUND_T_QUEUE)
 
+    # Rolling window for unified RMSE-based feedback
     MAX_ROLLING_RMSE_QUEUE = 144
     rolling_moisture       = deque(maxlen=MAX_ROLLING_RMSE_QUEUE)
 
@@ -87,6 +86,7 @@ def main(Input_Output):
     pulse_this_cycle = 0.0
     pump_on_this_cycle = 0
 
+    # Log files (unchanged)
     log_file = open('watering_log.csv', 'a', newline='')
     writer   = csv.writer(log_file)
     if log_file.tell() == 0:
@@ -137,7 +137,6 @@ def main(Input_Output):
         now_dt = datetime.now()
         now    = time.time()
 
-        # ── FIX: Safe defaults so print() never crashes ──
         rmse = 0.0
         pos_weight = 1.0
 
@@ -300,6 +299,7 @@ def main(Input_Output):
         for event in event_buffer:
             event['moisture_readings'].append(soil_moisture_corrected)
 
+        # ── UNIFIED FEEDBACK (both watered and not-watered) ──
         completed = [e for e in event_buffer if (now - e['fire_time']) >= 86400]
         for event in completed:
             if event['feature_seq'] is None or len(event['moisture_readings']) == 0:
@@ -309,12 +309,21 @@ def main(Input_Output):
             rmse       = math.sqrt(sum((r - 50.0) ** 2 for r in readings) / len(readings))
             mean_error = sum(r - 50.0 for r in readings) / len(readings)
 
-            target_prob = 1.0 if rmse < RMSE_GOOD_THRESHOLD else 0.0
+            G = 1.0 / (1.0 + rmse)                    # unified goodness scalar
+
+            # Watered event
+            if event.get('pulse_s', 0) > 0.1:         # this was a watering
+                target_prob = 1.0
+                pos_weight  = 10.0 * G
+            # Not-watered (idle) event
+            else:
+                target_prob = 0.0
+                pos_weight  = 2.0 * G                 # you can tune this base strength
 
             t_loss = online_update_threshold(
                 event['feature_seq'], target_prob,
                 model_threshold, optimizer_threshold,
-                pos_weight=10.0,
+                pos_weight=pos_weight,
             )
 
             g_info = online_update_gain_scheduler(
@@ -336,6 +345,7 @@ def main(Input_Output):
 
         event_buffer = [e for e in event_buffer if (now - e['fire_time']) < 86400]
 
+        # ── IDLE NEGATIVE TRAINING (now also uses unified G) ──
         if not allow_water and seq_tensor is not None and sensor_errors == 0:
             idle_cycle_counter += 1
             if idle_cycle_counter >= IDLE_TRAIN_CYCLES and len(rolling_moisture) >= 30:
@@ -343,18 +353,12 @@ def main(Input_Output):
 
                 readings = list(rolling_moisture)
                 rmse = math.sqrt(sum((r - 50.0) ** 2 for r in readings) / len(readings))
-
-                if rmse < 1.5:
-                    pos_weight = 2.5
-                elif rmse > 3.0:
-                    pos_weight = 0.5
-                else:
-                    pos_weight = 1.0 + (3.0 - rmse) * 0.5
+                G = 1.0 / (1.0 + rmse)
 
                 online_update_threshold(
                     seq_tensor, 0.0,
                     model_threshold, optimizer_threshold,
-                    pos_weight=pos_weight,
+                    pos_weight=1.0 * G,          # idle feedback strength
                 )
 
         writer.writerow([
@@ -375,8 +379,7 @@ def main(Input_Output):
               f"(corr: {soil_moisture_corrected:5.1f}%, avg: {moisture_avg:5.1f}%) | "
               f"Thresh: {threshold_prob:.3f} | Gate: {effective_threshold:.2f}% | "
               f"Gains: Kp={pid.kp:.4f} Ki={pid.ki:.4f} Kd={pid.kd:.4f} | "
-              f"Avg err: {avg_error:+5.1f}% | Waterings today: {waterings_today}/5 | "
-              f"Idle RMSE: {rmse:.2f} (pos_weight={pos_weight:.1f})")
+              f"Avg err: {avg_error:+5.1f}% | Waterings today: {waterings_today}/5")
 
         pulse_this_cycle = 0.0
         pump_on_this_cycle = 0
