@@ -73,7 +73,6 @@ def main(Input_Output):
     MAX_GROUND_T_QUEUE = 10
     ground_t_window    = deque(maxlen=MAX_GROUND_T_QUEUE)
 
-    # Rolling window for unified RMSE-based feedback
     MAX_ROLLING_RMSE_QUEUE = 144
     rolling_moisture       = deque(maxlen=MAX_ROLLING_RMSE_QUEUE)
 
@@ -86,7 +85,6 @@ def main(Input_Output):
     pulse_this_cycle = 0.0
     pump_on_this_cycle = 0
 
-    # Log files (unchanged)
     log_file = open('watering_log.csv', 'a', newline='')
     writer   = csv.writer(log_file)
     if log_file.tell() == 0:
@@ -220,10 +218,11 @@ def main(Input_Output):
         kp_mult = ki_mult = kd_mult = 1.0
         if allow_water:
             with torch.no_grad():
-                multipliers = model_gains(inference_tensor).squeeze()
-            kp_mult = 1.0 + 0.3 * (multipliers[0].item() - 1.0)
-            ki_mult = 1.0 + 0.3 * (multipliers[1].item() - 1.0)
-            kd_mult = 1.0 + 0.3 * (multipliers[2].item() - 1.0)
+                raw_multipliers = model_gains(inference_tensor).squeeze()   # [0, 2]
+            # NEW: damping = 0.5
+            kp_mult = 1.0 + 0.5 * (raw_multipliers[0].item() - 1.0)
+            ki_mult = 1.0 + 0.5 * (raw_multipliers[1].item() - 1.0)
+            kd_mult = 1.0 + 0.5 * (raw_multipliers[2].item() - 1.0)
 
             pid.kp = base_kp * kp_mult
             pid.ki = base_ki * ki_mult
@@ -263,9 +262,9 @@ def main(Input_Output):
                 gain_history_writer.writerow([
                     fire_ts, fire_ts,
                     round(kp_mult, 3), round(ki_mult, 3), round(kd_mult, 3),
-                    round(pid.kp, 4),  round(pid.ki, 4),  round(pid.kd, 4),
+                    round(pid.kp, 4), round(pid.ki, 4), round(pid.kd, 4),
                     round(pulse_s, 2), round(avg_error, 4),
-                    waterings_today,   round(threshold_prob, 3),
+                    waterings_today, round(threshold_prob, 3),
                 ])
                 gain_history_log_file.flush()
 
@@ -274,7 +273,7 @@ def main(Input_Output):
                     'fire_timestamp':    fire_ts,
                     'feature_seq':       seq_tensor.clone().detach(),
                     'avg_error_at_fire': avg_error,
-                    'kp_mult':           kp_mult,
+                    'kp_mult':           kp_mult,      # store the actual used multiplier
                     'ki_mult':           ki_mult,
                     'kd_mult':           kd_mult,
                     'kp':                pid.kp,
@@ -299,7 +298,6 @@ def main(Input_Output):
         for event in event_buffer:
             event['moisture_readings'].append(soil_moisture_corrected)
 
-        # ── UNIFIED FEEDBACK (both watered and not-watered) ──
         completed = [e for e in event_buffer if (now - e['fire_time']) >= 86400]
         for event in completed:
             if event['feature_seq'] is None or len(event['moisture_readings']) == 0:
@@ -309,25 +307,19 @@ def main(Input_Output):
             rmse       = math.sqrt(sum((r - 50.0) ** 2 for r in readings) / len(readings))
             mean_error = sum(r - 50.0 for r in readings) / len(readings)
 
-            G = 1.0 / (1.0 + rmse)                    # unified goodness scalar
-
-            # Watered event
-            if event.get('pulse_s', 0) > 0.1:         # this was a watering
-                target_prob = 1.0
-                pos_weight  = 10.0 * G
-            # Not-watered (idle) event
-            else:
-                target_prob = 0.0
-                pos_weight  = 2.0 * G                 # you can tune this base strength
+            # NEW residual target as requested
+            previous_mult = event.get('kp_mult', 1.0)
+            target_mult = previous_mult - math.tanh(mean_error / 5.0)
+            target_mult = max(0.5, min(1.5, target_mult))   # clip to new range
 
             t_loss = online_update_threshold(
-                event['feature_seq'], target_prob,
+                event['feature_seq'], 0.0 if event.get('pulse_s', 0) == 0 else 1.0,
                 model_threshold, optimizer_threshold,
-                pos_weight=pos_weight,
+                pos_weight=10.0,
             )
 
             g_info = online_update_gain_scheduler(
-                event['feature_seq'], event['avg_error_at_fire'],
+                event['feature_seq'], target_mult,   # residual target
                 model_gains, optimizer_gains,
             )
 
@@ -336,7 +328,7 @@ def main(Input_Output):
                 event['fire_timestamp'],
                 round(rmse, 4),
                 round(mean_error, 4),
-                round(target_prob, 1),
+                round(1.0 if event.get('pulse_s', 0) > 0 else 0.0, 1),
                 round(t_loss, 4),
                 round(g_info['target_mult'], 3),
                 round(g_info['loss'], 4),
@@ -345,21 +337,14 @@ def main(Input_Output):
 
         event_buffer = [e for e in event_buffer if (now - e['fire_time']) < 86400]
 
-        # ── IDLE NEGATIVE TRAINING (now also uses unified G) ──
         if not allow_water and seq_tensor is not None and sensor_errors == 0:
             idle_cycle_counter += 1
             if idle_cycle_counter >= IDLE_TRAIN_CYCLES and len(rolling_moisture) >= 30:
                 idle_cycle_counter = 0
-
                 readings = list(rolling_moisture)
                 rmse = math.sqrt(sum((r - 50.0) ** 2 for r in readings) / len(readings))
                 G = 1.0 / (1.0 + rmse)
-
-                online_update_threshold(
-                    seq_tensor, 0.0,
-                    model_threshold, optimizer_threshold,
-                    pos_weight=1.0 * G,          # idle feedback strength
-                )
+                online_update_threshold(seq_tensor, 0.0, model_threshold, optimizer_threshold, pos_weight=G)
 
         writer.writerow([
             now_dt.strftime('%Y-%m-%d %H:%M:%S'),

@@ -10,5 +10,6 @@ class LSTM_GainScheduler(nn.Module):
     def forward(self, x):
         lstm_out, _ = self.lstm(x)
         last_hidden = lstm_out[:, -1, :]
-        multipliers = torch.sigmoid(self.fc(last_hidden)) * 1.5 + 0.5
+        # NEW scaling as requested
+        multipliers = torch.sigmoid(self.fc(last_hidden)) * 2.0
         return multipliers
