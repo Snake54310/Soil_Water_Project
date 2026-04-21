@@ -162,7 +162,7 @@ def main(Input_Output):
         soil_moisture_corrected = soil_moisture / temp_correction_factor
 
         moisture_window.append(soil_moisture_corrected)
-        if len(moisture_window) >= 3:
+        if len(moisture_window) >= 9:
             sorted_moisture = sorted(moisture_window)
             moisture_avg    = sum(sorted_moisture[4:-4]) / len(sorted_moisture[4:-4]) # drop 2 upper and 2 lower outliers
         else:
