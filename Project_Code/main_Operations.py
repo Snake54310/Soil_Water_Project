@@ -151,7 +151,7 @@ def main(Input_Output):
         sensor_errors = 1 if (ground_t == 0 or air_t == 0 or humidity == 0 or soil_moisture == 0) else 0
 
         ground_t_window.append(ground_t)
-        if len(ground_t_window) >= 3:
+        if len(ground_t_window) >= 9:
             sorted_temps = sorted(ground_t_window)
             ground_t_avg = sum(sorted_temps[4:-4]) / len(sorted_temps[4:-4]) # drop 2 upper and 2 lower outliers
         else:
