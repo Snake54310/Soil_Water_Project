@@ -153,7 +153,7 @@ def main(Input_Output):
         ground_t_window.append(ground_t)
         if len(ground_t_window) >= 3:
             sorted_temps = sorted(ground_t_window)
-            ground_t_avg = sum(sorted_temps[1:-1]) / len(sorted_temps[1:-1])
+            ground_t_avg = sum(sorted_temps[2:-2]) / len(sorted_temps[2:-2]) # drop 2 upper and 2 lower outliers
         else:
             ground_t_avg = sum(ground_t_window) / len(ground_t_window)
 
@@ -164,7 +164,7 @@ def main(Input_Output):
         moisture_window.append(soil_moisture_corrected)
         if len(moisture_window) >= 3:
             sorted_moisture = sorted(moisture_window)
-            moisture_avg    = sum(sorted_moisture[1:-1]) / len(sorted_moisture[1:-1])
+            moisture_avg    = sum(sorted_moisture[2:-2]) / len(sorted_moisture[2:-2]) # drop 2 upper and 2 lower outliers
         else:
             moisture_avg = sum(moisture_window) / len(moisture_window)
 
@@ -206,7 +206,8 @@ def main(Input_Output):
             threshold_prob = model_threshold(inference_tensor).item()
 
         confidence          = max(0.0, (threshold_prob - 0.5) * 2.0)
-        effective_threshold = 49.4 + (50.0 - 49.4) * confidence
+        lowest_threshold = 48.6
+        effective_threshold = lowest_threshold + (50.0 - lowest_threshold) * confidence
 
         allow_water = (
             can_water
