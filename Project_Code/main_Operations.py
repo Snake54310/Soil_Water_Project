@@ -206,7 +206,7 @@ def main(Input_Output):
             threshold_prob = model_threshold(inference_tensor).item()
 
         confidence          = max(0.0, (threshold_prob - 0.5) * 2.0)
-        lowest_threshold = 48.6
+        lowest_threshold = 48.8
         effective_threshold = lowest_threshold + (50.0 - lowest_threshold) * confidence
 
         allow_water = (

@@ -7,7 +7,7 @@ print("Creating initial LSTM models with special output initialization...")
 # LSTM 1 - Threshold (unchanged)
 model1 = LSTM_Threshold()
 model1.fc.weight.data.zero_()
-model1.fc.bias.data.fill_(0.0)   # sigmoid(1.0986) ≈ 0.75
+model1.fc.bias.data.fill_(1.335)   # sigmoid(1.0986) ≈ 0.75, # sigmoid(1.335) ≈ 0.7917 → gives exactly 49.5 %
 # sigmoid(0.0) ≈ 0.5
 
 # LSTM 2 - Gain Scheduler (NEW: produces final_mult = 1.0 after *2 + damping 0.5)
