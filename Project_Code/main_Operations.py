@@ -67,10 +67,10 @@ def main(Input_Output):
     sum_air_t = sum_ground_t = sum_humidity = sum_error = 0.0
     sample_count = 0
 
-    MAX_MOISTURE_QUEUE = 10
+    MAX_MOISTURE_QUEUE = 20
     moisture_window    = deque(maxlen=MAX_MOISTURE_QUEUE)
 
-    MAX_GROUND_T_QUEUE = 10
+    MAX_GROUND_T_QUEUE = 20
     ground_t_window    = deque(maxlen=MAX_GROUND_T_QUEUE)
 
     MAX_ROLLING_RMSE_QUEUE = 144
@@ -153,7 +153,7 @@ def main(Input_Output):
         ground_t_window.append(ground_t)
         if len(ground_t_window) >= 3:
             sorted_temps = sorted(ground_t_window)
-            ground_t_avg = sum(sorted_temps[2:-2]) / len(sorted_temps[2:-2]) # drop 2 upper and 2 lower outliers
+            ground_t_avg = sum(sorted_temps[4:-4]) / len(sorted_temps[4:-4]) # drop 2 upper and 2 lower outliers
         else:
             ground_t_avg = sum(ground_t_window) / len(ground_t_window)
 
@@ -164,7 +164,7 @@ def main(Input_Output):
         moisture_window.append(soil_moisture_corrected)
         if len(moisture_window) >= 3:
             sorted_moisture = sorted(moisture_window)
-            moisture_avg    = sum(sorted_moisture[2:-2]) / len(sorted_moisture[2:-2]) # drop 2 upper and 2 lower outliers
+            moisture_avg    = sum(sorted_moisture[4:-4]) / len(sorted_moisture[4:-4]) # drop 2 upper and 2 lower outliers
         else:
             moisture_avg = sum(moisture_window) / len(moisture_window)
 

@@ -12,8 +12,8 @@ from lstm_gain_scheduler import LSTM_GainScheduler
 
 INPUT_SIZE         = 12
 SEQ_LEN            = 30
-THRESHOLD_LR       = 0.001
-GAIN_LR            = 0.005
+THRESHOLD_LR       = 0.02
+GAIN_LR            = 0.04
 SENSITIVITY_SCALE  = 5.0
 RMSE_GOOD_THRESHOLD = 2.0
 LOOKAHEAD_ROWS     = 144
