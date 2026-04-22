@@ -16,11 +16,21 @@ class Input_Output_Operations:
         self.maxUptime = maximumUptime
 
         # ====================== STEMMA SOIL SENSOR CALIBRATION ======================
-        self.DRY_1 = 550        # raw value for sensor at 0x36 when completely dry
-        self.WET_1 = 1016      # raw value for sensor at 0x36 when fully saturated
-        self.DRY_2 = 550        # raw value for sensor at 0x37 when completely dry
-        self.WET_2 = 1016      # raw value for sensor at 0x37 when fully saturated
+        self.DRY_1 = 550
+        self.WET_1 = 1016
+        self.DRY_2 = 550
+        self.WET_2 = 1016
         # =============================================================================
+
+        # === NEW: Initialize I2C and HTS221 only once ===
+        try:
+            self._i2c = board.I2C()
+            self._hts = adafruit_hts221.HTS221(self._i2c)
+            print("HTS221 sensor initialized successfully.")
+        except Exception as e:
+            print(f"Warning: HTS221 initialization failed: {e}")
+            self._i2c = None
+            self._hts = None
 
     def detect_stemma(self):
         """Returns True only if BOTH STEMMA sensors are detected on I2C."""
@@ -48,16 +58,19 @@ class Input_Output_Operations:
 
     def readHumidityAndTemp(self):
         try:
-            i2c = board.I2C()
-            hts = adafruit_hts221.HTS221(i2c)
-            temp_humid = [hts.temperature, hts.humidity]
-            self.airtemp = temp_humid[0]
-            self.humidity = temp_humid[1]
-            return temp_humid
+            time.sleep(0.12)  # short pause to let I2C bus settle
+            if self._hts is None:
+                return [16.0, 18.0]
+
+            temp = self._hts.temperature
+            hum = self._hts.relative_humidity
+            self.airtemp = temp
+            self.humidity = hum
+            return [temp, hum]
         except Exception:
-            self.airtemp = 0.0
-            self.humidity = 0.0
-            return [0.0, 0.0]   # HTS221 failed — continue anyway
+            self.airtemp = 16.0
+            self.humidity = 18.0
+            return [16.0, 18.0]
 
     def activatePump(self, pumpTimer=5):
         GPIO.setmode(GPIO.BCM)
