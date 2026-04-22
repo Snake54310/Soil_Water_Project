@@ -31,6 +31,7 @@ def main(Input_Output):
     global event_buffer, feature_history, ground_t_avg
 
     MOISTURE_TARGET = 52.0
+    LOWEST_THRESHOLD = 50.8
 
     MAX_WATERINGS_PER_DAY = 5
     MIN_TIME_BETWEEN_MIN  = 120
@@ -206,8 +207,7 @@ def main(Input_Output):
             threshold_prob = model_threshold(inference_tensor).item()
 
         confidence          = max(0.0, (threshold_prob - 0.5) * 2.0)
-        lowest_threshold = 48.8
-        effective_threshold = lowest_threshold + (MOISTURE_TARGET - lowest_threshold) * confidence
+        effective_threshold = LOWEST_THRESHOLD + (MOISTURE_TARGET - LOWEST_THRESHOLD) * confidence
 
         allow_water = (
             can_water
