@@ -30,7 +30,7 @@ def setup():
 def main(Input_Output):
     global event_buffer, feature_history, ground_t_avg
 
-    MOISTURE_TARGET = 50.0
+    MOISTURE_TARGET = 52.0
 
     MAX_WATERINGS_PER_DAY = 5
     MIN_TIME_BETWEEN_MIN  = 120
@@ -207,12 +207,12 @@ def main(Input_Output):
 
         confidence          = max(0.0, (threshold_prob - 0.5) * 2.0)
         lowest_threshold = 48.8
-        effective_threshold = lowest_threshold + (50.0 - lowest_threshold) * confidence
+        effective_threshold = lowest_threshold + (MOISTURE_TARGET - lowest_threshold) * confidence
 
         allow_water = (
             can_water
             and moisture_avg < effective_threshold
-            and moisture_avg < 50.0
+            and moisture_avg < MOISTURE_TARGET
             and threshold_prob > 0.5
         )
 
@@ -308,8 +308,8 @@ def main(Input_Output):
                 continue
 
             readings   = event['moisture_readings']
-            rmse       = math.sqrt(sum((r - 50.0) ** 2 for r in readings) / len(readings))
-            mean_error = sum(r - 50.0 for r in readings) / len(readings)
+            rmse       = math.sqrt(sum((r - MOISTURE_TARGET) ** 2 for r in readings) / len(readings))
+            mean_error = sum(r - MOISTURE_TARGET for r in readings) / len(readings)
 
             G = 1.0 / (1.0 + rmse)
 
@@ -356,7 +356,7 @@ def main(Input_Output):
             if idle_cycle_counter >= IDLE_TRAIN_CYCLES and len(rolling_moisture) >= 30:
                 idle_cycle_counter = 0
                 readings = list(rolling_moisture)
-                rmse = math.sqrt(sum((r - 50.0) ** 2 for r in readings) / len(readings))
+                rmse = math.sqrt(sum((r - MOISTURE_TARGET) ** 2 for r in readings) / len(readings))
                 G = 1.0 / (1.0 + rmse)
                 online_update_threshold(seq_tensor, 0.0, model_threshold, optimizer_threshold, pos_weight=G)
 
@@ -391,7 +391,7 @@ if __name__ == "__main__":
 
     if Input_Output.detect_stemma():
         print("STEMMA sensors detected — starting controller.")
-        Input_Output.activatePump(1.0)
+        # Input_Output.activatePump(1.0)
         time.sleep(2)
         main(Input_Output)
     else:
