@@ -1,2 +1,3 @@
 timestamp,fire_timestamp,rmse_24hr,mean_error_24hr,threshold_target_prob,threshold_loss,gain_target_mult,gain_loss
 2026-04-19 20:45:47,2026-04-18 20:45:41,2.4892,2.036,0.0,1.3863,0.91,0.0082
+2026-04-23 15:04:24,2026-04-22 15:04:12,1.9961,1.662,1.0,20.1856,0.359,0.4113
