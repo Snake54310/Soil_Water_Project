@@ -30,8 +30,8 @@ def setup():
 def main(Input_Output):
     global event_buffer, feature_history, ground_t_avg
 
-    MOISTURE_TARGET = 52.0
-    LOWEST_THRESHOLD = 50.8
+    MOISTURE_TARGET = 60.0
+    LOWEST_THRESHOLD = 58.8
 
     MAX_WATERINGS_PER_DAY = 5
     MIN_TIME_BETWEEN_MIN  = 120
@@ -315,10 +315,10 @@ def main(Input_Output):
 
             if event.get('pulse_s', 0) > 0.1:
                 target_prob = 1.0
-                pos_weight  = 10.0 * G
+                pos_weight  = 2 * G
             else:
                 target_prob = 0.0
-                pos_weight  = 1.0 * G
+                pos_weight  = 0.1 * G
 
             t_loss = online_update_threshold(
                 event['feature_seq'], target_prob,
@@ -351,14 +351,32 @@ def main(Input_Output):
 
         event_buffer = [e for e in event_buffer if (now - e['fire_time']) < 86400]
 
+        # Idle negative training (unified G)
         if not allow_water and seq_tensor is not None and sensor_errors == 0:
             idle_cycle_counter += 1
             if idle_cycle_counter >= IDLE_TRAIN_CYCLES and len(rolling_moisture) >= 30:
                 idle_cycle_counter = 0
                 readings = list(rolling_moisture)
                 rmse = math.sqrt(sum((r - MOISTURE_TARGET) ** 2 for r in readings) / len(readings))
-                G = 1.0 / (1.0 + rmse)
-                online_update_threshold(seq_tensor, 0.0, model_threshold, optimizer_threshold, pos_weight=G)
+                G = 1.0 / (1.0 + 4 * rmse)
+
+                # Capture actual loss from idle update
+                t_loss = online_update_threshold(
+                    seq_tensor, 0.0, model_threshold, optimizer_threshold, pos_weight=G
+                )
+
+                # === LOG IDLE NEGATIVE TRAINING (clean, meaningful) ===
+                training_writer.writerow([
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "IDLE",  # fire_timestamp
+                    round(rmse, 4),
+                    0.0,  # mean_error not applicable for idle
+                    0.0,  # target_prob = 0.0
+                    round(t_loss, 4),  # real threshold loss
+                    0.0,  # gain not updated during idle
+                    0.0,  # gain loss N/A
+                ])
+                training_log_file.flush()
 
         writer.writerow([
             now_dt.strftime('%Y-%m-%d %H:%M:%S'),
