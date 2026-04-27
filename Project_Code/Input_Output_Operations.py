@@ -120,8 +120,8 @@ class Input_Output_Operations:
             return avg_percent
         except Exception as e:
             print(f"STEMMA read error: {e}")
-            self.soilMoisture = 52.0 # if read fails, return basic value (target, but still slightly off due to temp correction)
-            return 52.0
+            self.soilMoisture = 65.0 # if read fails, return basic value (target, but still slightly off due to temp correction)
+            return 65.0
 
     def readAll(self, pumpTimer=5):
         GroundTemp = self.readGroundTemp()

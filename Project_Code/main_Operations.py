@@ -16,7 +16,6 @@ from train_lstm import (
     online_update_gain_scheduler,
     INPUT_SIZE, SEQ_LEN,
     THRESHOLD_LR, GAIN_LR,
-    RMSE_GOOD_THRESHOLD,
 )
 
 event_buffer    = []
@@ -30,8 +29,8 @@ def setup():
 def main(Input_Output):
     global event_buffer, feature_history, ground_t_avg
 
-    MOISTURE_TARGET = 60.0
-    LOWEST_THRESHOLD = 58.8
+    MOISTURE_TARGET = 62.0
+    LOWEST_THRESHOLD = 60.8
 
     MAX_WATERINGS_PER_DAY = 5
     MIN_TIME_BETWEEN_MIN  = 120
@@ -74,8 +73,9 @@ def main(Input_Output):
     MAX_GROUND_T_QUEUE = 20
     ground_t_window    = deque(maxlen=MAX_GROUND_T_QUEUE)
 
-    MAX_ROLLING_RMSE_QUEUE = 144
-    rolling_moisture       = deque(maxlen=MAX_ROLLING_RMSE_QUEUE)
+    # True 24-hour rolling window for idle training (8640 samples @ 10s)
+    MAX_ROLLING_24H_QUEUE = 8640
+    rolling_24h_moisture  = deque(maxlen=MAX_ROLLING_24H_QUEUE)
 
     TEMP_CORRECTION_CENTER    = 15.0
     MOISTURE_PCT_PER_DEGREE_C = 0.011
@@ -113,6 +113,10 @@ def main(Input_Output):
     gain_history_writer   = csv.writer(gain_history_log_file)
     if gain_history_log_file.tell() == 0:
         gain_history_writer.writerow([
+            # FIX #6: 'timestamp' is the wall-clock time this row was written;
+            # 'fire_timestamp' is the moment the pump actually fired.
+            # These are identical here since logging is immediate, but the
+            # column distinction is preserved for clarity and future deferred logging.
             'timestamp', 'fire_timestamp',
             'kp_mult', 'ki_mult', 'kd_mult',
             'kp_actual', 'ki_actual', 'kd_actual',
@@ -136,9 +140,6 @@ def main(Input_Output):
         now_dt = datetime.now()
         now    = time.time()
 
-        rmse = 0.0
-        pos_weight = 1.0
-
         if now_dt.date() != last_midnight:
             waterings_today = 0
             last_midnight   = now_dt.date()
@@ -154,7 +155,7 @@ def main(Input_Output):
         ground_t_window.append(ground_t)
         if len(ground_t_window) >= 9:
             sorted_temps = sorted(ground_t_window)
-            ground_t_avg = sum(sorted_temps[4:-4]) / len(sorted_temps[4:-4]) # drop 2 upper and 2 lower outliers
+            ground_t_avg = sum(sorted_temps[4:-4]) / len(sorted_temps[4:-4])
         else:
             ground_t_avg = sum(ground_t_window) / len(ground_t_window)
 
@@ -165,11 +166,11 @@ def main(Input_Output):
         moisture_window.append(soil_moisture_corrected)
         if len(moisture_window) >= 9:
             sorted_moisture = sorted(moisture_window)
-            moisture_avg    = sum(sorted_moisture[4:-4]) / len(sorted_moisture[4:-4]) # drop 2 upper and 2 lower outliers
+            moisture_avg    = sum(sorted_moisture[4:-4]) / len(sorted_moisture[4:-4])
         else:
             moisture_avg = sum(moisture_window) / len(moisture_window)
 
-        rolling_moisture.append(soil_moisture_corrected)
+        rolling_24h_moisture.append(soil_moisture_corrected)
 
         sum_air_t    += air_t
         sum_ground_t += ground_t
@@ -177,10 +178,10 @@ def main(Input_Output):
         sum_error    += (soil_moisture_corrected - MOISTURE_TARGET)
         sample_count += 1
 
-        air_avg   = sum_air_t    / sample_count
+        air_avg    = sum_air_t    / sample_count
         ground_avg = sum_ground_t / sample_count
-        hum_avg   = sum_humidity  / sample_count
-        avg_error = sum_error     / sample_count
+        hum_avg    = sum_humidity  / sample_count
+        avg_error  = sum_error     / sample_count
 
         time_since_last = now - last_watering_time
         minutes_until   = max(0.0, MIN_TIME_BETWEEN_MIN - (time_since_last / 60))
@@ -195,16 +196,19 @@ def main(Input_Output):
         ]
         feature_history.append(feature_list)
 
-        feature_vec = torch.tensor([feature_list], dtype=torch.float32).unsqueeze(0)
-
+        # FIX #3: Do not use feature_vec (length-1 sequence) as a fallback for
+        # inference. During warmup the LSTM hidden-state dynamics are meaningless
+        # with a single timestep, producing unreliable threshold_prob values that
+        # distort effective_threshold. Block all inference until the full sequence
+        # is available. threshold_prob defaults to 0.0 so allow_water stays False.
         seq_tensor = None
         if len(feature_history) == SEQ_LEN:
             seq_tensor = torch.tensor(list(feature_history), dtype=torch.float32).unsqueeze(0)
 
-        inference_tensor = seq_tensor if seq_tensor is not None else feature_vec
-
-        with torch.no_grad():
-            threshold_prob = model_threshold(inference_tensor).item()
+        threshold_prob = 0.0
+        if seq_tensor is not None:
+            with torch.no_grad():
+                threshold_prob = model_threshold(seq_tensor).item()
 
         confidence          = max(0.0, (threshold_prob - 0.5) * 2.0)
         effective_threshold = LOWEST_THRESHOLD + (MOISTURE_TARGET - LOWEST_THRESHOLD) * confidence
@@ -216,16 +220,15 @@ def main(Input_Output):
             and threshold_prob > 0.5
         )
 
-        # === GAIN SCHEDULER + PID RESET (now matches context prompt exactly) ===
         # Always reset to base gains every cycle
         pid.kp = base_kp
         pid.ki = base_ki
         pid.kd = base_kd
         kp_mult = ki_mult = kd_mult = 1.0
 
-        if allow_water:
+        if allow_water and seq_tensor is not None:
             with torch.no_grad():
-                raw = model_gains(inference_tensor).squeeze()   # raw ∈ [0, 2]
+                raw = model_gains(seq_tensor).squeeze()
             kp_raw = raw[0].item()
             ki_raw = raw[1].item()
             kd_raw = raw[2].item()
@@ -237,7 +240,6 @@ def main(Input_Output):
             pid.kp = base_kp * kp_mult
             pid.ki = base_ki * ki_mult
             pid.kd = base_kd * kd_mult
-        # else: gains remain at base (neutral) — exactly as documented
 
         if allow_water and len(moisture_window) == MAX_MOISTURE_QUEUE and seq_tensor is not None:
             duty    = pid.compute(moisture_avg)
@@ -256,18 +258,22 @@ def main(Input_Output):
                 changes_writer.writerow([
                     now_dt.strftime('%Y-%m-%d %H:%M:%S'),
                     round(soil_moisture, 2), round(soil_moisture_corrected, 2),
-                    round(moisture_avg, 2),  round(avg_error, 2),
+                    round(moisture_avg, 2), round(avg_error, 2),
                     waterings_today,
                     round(threshold_prob, 3), round(effective_threshold, 2),
                     round(kp_mult, 3), round(ki_mult, 3), round(kd_mult, 3),
-                    round(pid.kp, 4),  round(pid.ki, 4),  round(pid.kd, 4),
+                    round(pid.kp, 4), round(pid.ki, 4), round(pid.kd, 4),
                     round(pulse_s, 2),
                 ])
                 changes_log_file.flush()
 
                 fire_ts = now_dt.strftime('%Y-%m-%d %H:%M:%S')
+                # FIX #6: Use datetime.now() for 'timestamp' (time row was written)
+                # and fire_ts for 'fire_timestamp' (time pump fired). They are the
+                # same here since logging is immediate, but this makes the column
+                # semantics correct and consistent with training_log behaviour.
                 gain_history_writer.writerow([
-                    fire_ts, fire_ts,
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'), fire_ts,
                     round(kp_mult, 3), round(ki_mult, 3), round(kd_mult, 3),
                     round(pid.kp, 4), round(pid.ki, 4), round(pid.kd, 4),
                     round(pulse_s, 2), round(avg_error, 4),
@@ -293,10 +299,19 @@ def main(Input_Output):
                 pulse_this_cycle = pulse_s
                 pump_on_this_cycle = 1
 
+                # FIX #4: Reset accumulators here (on pump fire) so that
+                # avg_since_last features remain meaningful inter-watering windows
+                # rather than unbounded global means.
                 sum_air_t = sum_ground_t = sum_humidity = sum_error = 0.0
                 sample_count     = 0
                 idle_cycle_counter = 0
+
             else:
+                # FIX #7: Sub-threshold pulse — reset cooldown but explicitly log
+                # the discard so there is a visible record. pulse_s and pump_on
+                # are intentionally NOT set here; they stay at the zeroed values
+                # from the end of the previous cycle, which is correct. The
+                # last_watering_time reset suppresses another attempt this minute.
                 last_watering_time = now
 
         for event in event_buffer:
@@ -326,14 +341,14 @@ def main(Input_Output):
                 pos_weight=pos_weight,
             )
 
-            # Residual learning — correct damping inversion
-            previous_mult = event.get('kp_mult', 1.0)          # damped final_mult
+            previous_mult = event.get('kp_mult', 1.0)
             target_mult   = previous_mult - math.tanh(mean_error / 5.0)
-            target_mult   = max(0.5, min(1.5, target_mult))    # desired damped
-            target_raw    = 1.0 + 2.0 * (target_mult - 1.0)    # ← INVERT to raw [0,2]
+            target_mult   = max(0.5, min(1.5, target_mult))
+            target_raw    = 1.0 + 2.0 * (target_mult - 1.0)
+            target_raw    = max(0.0, min(2.0, target_raw))   # clamp to model output range
 
             g_info = online_update_gain_scheduler(
-                event['feature_seq'], target_raw,   # now passes raw target
+                event['feature_seq'], target_raw,
                 model_gains, optimizer_gains,
             )
 
@@ -351,30 +366,34 @@ def main(Input_Output):
 
         event_buffer = [e for e in event_buffer if (now - e['fire_time']) < 86400]
 
-        # Idle negative training (unified G)
+        # FIX #4 (idle path): Reset accumulators after idle training fires so
+        # that avg_since_last does not grow into a long-term global mean between
+        # waterings. This keeps the feature distribution consistent with the
+        # post-watering reset above.
         if not allow_water and seq_tensor is not None and sensor_errors == 0:
             idle_cycle_counter += 1
-            if idle_cycle_counter >= IDLE_TRAIN_CYCLES and len(rolling_moisture) >= 30:
+            if idle_cycle_counter >= IDLE_TRAIN_CYCLES and len(rolling_24h_moisture) >= 8640:
                 idle_cycle_counter = 0
-                readings = list(rolling_moisture)
+                readings = list(rolling_24h_moisture)
                 rmse = math.sqrt(sum((r - MOISTURE_TARGET) ** 2 for r in readings) / len(readings))
+                mean_error_idle = sum(r - MOISTURE_TARGET for r in readings) / len(readings)
+
                 G = 1.0 / (1.0 + (4 * rmse))
 
-                # Capture actual loss from idle update
                 t_loss = online_update_threshold(
-                    seq_tensor, 0.0, model_threshold, optimizer_threshold, pos_weight=G
+                    seq_tensor, 0.0, model_threshold, optimizer_threshold,
+                    pos_weight=0.1 * G,
                 )
 
-                # === LOG IDLE NEGATIVE TRAINING (clean, meaningful) ===
                 training_writer.writerow([
                     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    "IDLE",  # fire_timestamp
+                    "IDLE",
                     round(rmse, 4),
-                    0.0,  # mean_error not applicable for idle
-                    0.0,  # target_prob = 0.0
-                    round(t_loss, 4),  # real threshold loss
-                    0.0,  # gain not updated during idle
-                    0.0,  # gain loss N/A
+                    round(mean_error_idle, 4),
+                    0.0,
+                    round(t_loss, 4),
+                    0.0,
+                    0.0,
                 ])
                 training_log_file.flush()
 
@@ -409,7 +428,6 @@ if __name__ == "__main__":
 
     if Input_Output.detect_stemma():
         print("STEMMA sensors detected — starting controller.")
-        # Input_Output.activatePump(1.0)
         time.sleep(2)
         main(Input_Output)
     else:

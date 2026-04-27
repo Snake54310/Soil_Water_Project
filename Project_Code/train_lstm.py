@@ -23,8 +23,8 @@ def online_update_threshold(feature_seq, target_prob, model, optimizer, pos_weig
     optimizer.zero_grad()
     pred = model(feature_seq)                    # shape (1, 1)
     target = torch.tensor([[target_prob]], dtype=torch.float32)
-    weight = torch.tensor([[pos_weight if target_prob == 1.0 else 1.0]],
-                          dtype=torch.float32)
+    weight = torch.tensor([[pos_weight]], dtype=torch.float32)
+
     loss = F.binary_cross_entropy(pred, target, weight=weight)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
