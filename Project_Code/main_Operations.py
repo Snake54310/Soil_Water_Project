@@ -311,7 +311,7 @@ def main(Input_Output):
             rmse       = math.sqrt(sum((r - MOISTURE_TARGET) ** 2 for r in readings) / len(readings))
             mean_error = sum(r - MOISTURE_TARGET for r in readings) / len(readings)
 
-            G = 1.0 / (1.0 + rmse)
+            G = 1.0 / (1.0 + (4 * rmse))
 
             if event.get('pulse_s', 0) > 0.1:
                 target_prob = 1.0
@@ -358,7 +358,7 @@ def main(Input_Output):
                 idle_cycle_counter = 0
                 readings = list(rolling_moisture)
                 rmse = math.sqrt(sum((r - MOISTURE_TARGET) ** 2 for r in readings) / len(readings))
-                G = 1.0 / (1.0 + 4 * rmse)
+                G = 1.0 / (1.0 + (4 * rmse))
 
                 # Capture actual loss from idle update
                 t_loss = online_update_threshold(
