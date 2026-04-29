@@ -48,7 +48,7 @@ def main():
                                            weights_only=True, map_location="cpu"))
     model_gains.eval()
 
-    for m in [50.8, 52.]:
+    for m in [55, 59]:
         feat = build_feature(m)
         # Create full 30-step sequence (matches live system + training)
         x = torch.tensor([feat] * 30, dtype=torch.float32).unsqueeze(0)  # (1, 30, 12)
@@ -75,7 +75,7 @@ def main():
                                             weights_only=True, map_location="cpu"))
     model_thresh.eval()
 
-    for m in [51.5, 52.5]:
+    for m in [59, 61]:
         feat = build_feature(m)
         x = torch.tensor([feat] * 30, dtype=torch.float32).unsqueeze(0)  # (1, 30, 12)
 

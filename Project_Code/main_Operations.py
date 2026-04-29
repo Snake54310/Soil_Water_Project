@@ -29,8 +29,8 @@ def setup():
 def main(Input_Output):
     global event_buffer, feature_history, ground_t_avg
 
-    MOISTURE_TARGET = 62.0
-    LOWEST_THRESHOLD = 60.8
+    MOISTURE_TARGET = 63.0
+    LOWEST_THRESHOLD = 62.2
 
     MAX_WATERINGS_PER_DAY = 5
     MIN_TIME_BETWEEN_MIN  = 120
