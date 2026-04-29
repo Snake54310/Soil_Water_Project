@@ -217,7 +217,6 @@ def main(Input_Output):
             can_water
             and moisture_avg < effective_threshold
             and moisture_avg < MOISTURE_TARGET
-            and threshold_prob > 0.5
         )
 
         # Always reset to base gains every cycle
