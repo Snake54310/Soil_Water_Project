@@ -9,12 +9,10 @@ from datetime import timedelta
 from lstm_threshold import LSTM_Threshold
 from lstm_gain_scheduler import LSTM_GainScheduler
 
-MOISTURE_TARGET    = 63.0
-SEQ_LEN            = 30
-SENSITIVITY_SCALE  = 1.5
-INPUT_SIZE         = 13
-THRESHOLD_LR       = 0.01
-GAIN_LR            = 0.005
+MOISTURE_TARGET = 63.0
+SEQ_LEN = 30
+SENSITIVITY_SCALE = 1.5
+INPUT_SIZE = 13
 
 # Global normalization for all 13 features (must match test script)
 df_global = pd.read_csv('watering_log.csv')
@@ -111,8 +109,8 @@ def replay_linear_13(epochs=3):
     except FileNotFoundError:
         print("No existing models found – using fresh initialization.")
 
-    optimizer_threshold = optim.Adam(model_threshold.parameters(), lr=THRESHOLD_LR)
-    optimizer_gains = optim.Adam(model_gains.parameters(), lr=GAIN_LR)
+    optimizer_threshold = optim.Adam(model_threshold.parameters(), lr=0.01)
+    optimizer_gains = optim.Adam(model_gains.parameters(), lr=0.005)
 
     for epoch in range(epochs):
         positive_count = 0
