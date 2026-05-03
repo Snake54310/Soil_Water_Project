@@ -15,6 +15,7 @@ SENSITIVITY_SCALE  = 1.5
 INPUT_SIZE         = 13
 THRESHOLD_LR       = 0.01
 GAIN_LR            = 0.005
+LSTM_LR            = 1e-4    # LSTM layers train slower to stay stable on sparse data
 
 # Global normalization for all 13 features (must match test script)
 df_global = pd.read_csv('watering_log.csv')
@@ -111,8 +112,14 @@ def replay_linear_13(epochs=3):
     except FileNotFoundError:
         print("No existing models found – using fresh initialization.")
 
-    optimizer_threshold = optim.Adam(model_threshold.parameters(), lr=THRESHOLD_LR)
-    optimizer_gains = optim.Adam(model_gains.parameters(), lr=GAIN_LR)
+    optimizer_threshold = optim.Adam([
+        {'params': model_threshold.lstm.parameters(),   'lr': LSTM_LR},
+        {'params': model_threshold.linear.parameters(), 'lr': THRESHOLD_LR},
+    ])
+    optimizer_gains = optim.Adam([
+        {'params': model_gains.lstm.parameters(),   'lr': LSTM_LR},
+        {'params': model_gains.linear.parameters(), 'lr': GAIN_LR},
+    ])
 
     for epoch in range(epochs):
         positive_count = 0

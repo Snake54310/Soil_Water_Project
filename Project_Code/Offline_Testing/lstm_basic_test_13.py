@@ -135,7 +135,7 @@ def main():
     print("[1] GAIN MULTIPLIER TEST (around 63% target)")
     print("-" * 60)
 
-    model_gains = LSTM_GainScheduler(input_size=13)
+    model_gains = LSTM_GainScheduler(input_size=13, lstm_hidden=8)
     model_gains.load_state_dict(
         torch.load("lstm_gain_scheduler.pth", weights_only=True, map_location="cpu")
     )
@@ -163,7 +163,7 @@ def main():
     print("[2] THRESHOLD PROBABILITY TEST (around 63% target)")
     print("-" * 60)
 
-    model_thresh = LSTM_Threshold(input_size=13)
+    model_thresh = LSTM_Threshold(input_size=13, lstm_hidden=8)
     model_thresh.load_state_dict(
         torch.load("lstm_threshold.pth", weights_only=True, map_location="cpu")
     )

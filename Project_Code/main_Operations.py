@@ -17,7 +17,7 @@ from train_lstm import (
     online_update_gain_scheduler,
     normalize_features,
     INPUT_SIZE, SEQ_LEN, MOISTURE_TARGET, SENSITIVITY_SCALE,
-    THRESHOLD_LR, GAIN_LR,
+    THRESHOLD_LR, GAIN_LR, LSTM_LR,
 )
 
 event_buffer       = []
@@ -59,8 +59,14 @@ def main(Input_Output):
     model_threshold.eval()
     model_gains.eval()
 
-    optimizer_threshold = Adam(model_threshold.parameters(), lr=THRESHOLD_LR)
-    optimizer_gains     = Adam(model_gains.parameters(),     lr=GAIN_LR)
+    optimizer_threshold = Adam([
+        {'params': model_threshold.lstm.parameters(),   'lr': LSTM_LR},
+        {'params': model_threshold.linear.parameters(), 'lr': THRESHOLD_LR},
+    ])
+    optimizer_gains = Adam([
+        {'params': model_gains.lstm.parameters(),   'lr': LSTM_LR},
+        {'params': model_gains.linear.parameters(), 'lr': GAIN_LR},
+    ])
 
     waterings_today    = 0
     last_watering_time = time.time() - 99999

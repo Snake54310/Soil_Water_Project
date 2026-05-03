@@ -1,16 +1,20 @@
+import torch
 import torch.nn as nn
 
 class LSTM_Threshold(nn.Module):
-    def __init__(self, input_size=13):
+    def __init__(self, input_size=13, lstm_hidden=8):
         super().__init__()
-        self.linear = nn.Linear(input_size, 1)
+        self.lstm    = nn.LSTM(input_size, lstm_hidden, batch_first=True)
+        self.linear  = nn.Linear(input_size + lstm_hidden, 1)
         self.sigmoid = nn.Sigmoid()
         # Bias is intentionally NOT set here.
         # initialize_lstm_models.py is the single source of truth for bias
-        # initialization (threshold=1.3 → ~0.79 prob, gain=0.0 → mult 1.0).
-        # Calling initialize_models() or loading a .pth is always required
-        # before training or inference.
+        # initialization. Calling initialize_models() or loading a .pth is
+        # always required before training or inference.
 
     def forward(self, x):
-        last = x[:, -1, :]                 # only last timestep
-        return self.sigmoid(self.linear(last))
+        _, (h, _) = self.lstm(x)              # h: (1, batch, lstm_hidden)
+        context   = h.squeeze(0)              # (batch, lstm_hidden)
+        last      = x[:, -1, :]              # (batch, input_size) — current timestep
+        combined  = torch.cat([last, context], dim=1)
+        return self.sigmoid(self.linear(combined))
