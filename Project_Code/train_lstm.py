@@ -83,11 +83,27 @@ def online_update_threshold(feature_seq, target_prob, model, optimizer, pos_weig
     torch.save(model.state_dict(), "lstm_threshold.pth")
     return loss.item()
 
+def compute_gain_target(prev_mult, mean_error):
+    """
+    Compute the raw [0, 2] gain target for a single gain channel given its
+    previous damped multiplier and the 24h mean moisture error.
+
+    Shared by replay_linear_13 and main_Operations.py so both use identical
+    gain target logic. Import via:
+
+        from train_lstm import compute_gain_target
+    """
+    target_mult = prev_mult - math.tanh(mean_error / SENSITIVITY_SCALE)
+    target_mult = max(0.5, min(1.5, target_mult))
+    target_raw  = 1.0 + 2.0 * (target_mult - 1.0)
+    return max(0.0, min(2.0, target_raw))
+
 def online_update_gain_scheduler(feature_seq, value, model, optimizer):
+    """value is a list [kp_raw, ki_raw, kd_raw] of independent raw targets in [0, 2]."""
     model.train()
     optimizer.zero_grad()
     pred = model(feature_seq).squeeze()
-    target = torch.tensor([value, value, value], dtype=torch.float32)
+    target = torch.tensor(value, dtype=torch.float32)
     loss = nn.MSELoss()(pred, target)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -146,11 +162,15 @@ def replay_linear_13(epochs=3):
                 with torch.no_grad():
                     raw = model_gains(seq_tensor).squeeze()
                 kp_mult = 1.0 + 0.5 * (raw[0].item() - 1.0)
+                ki_mult = 1.0 + 0.5 * (raw[1].item() - 1.0)
+                kd_mult = 1.0 + 0.5 * (raw[2].item() - 1.0)
 
                 event = {
                     'fire_time': now,
                     'feature_seq': seq_tensor.clone().detach(),
                     'kp_mult': kp_mult,
+                    'ki_mult': ki_mult,
+                    'kd_mult': kd_mult,
                     'waterings_at_fire': int(row['waterings_today']),
                     'is_negative': False
                 }
@@ -187,11 +207,11 @@ def replay_linear_13(epochs=3):
                         factor = 0.1
                     online_update_threshold(event['feature_seq'], 1.0, model_threshold, optimizer_threshold, pos_weight=G * factor)
 
-                    previous_mult = event.get('kp_mult', 1.0)
-                    target_mult = previous_mult - math.tanh(avg_error / SENSITIVITY_SCALE)
-                    target_mult = max(0.5, min(1.5, target_mult))
-                    target_raw = 1.0 + 2.0 * (target_mult - 1.0)
-                    target_raw = max(0.0, min(2.0, target_raw))
+                    target_raw = [
+                        compute_gain_target(event.get('kp_mult', 1.0), avg_error),
+                        compute_gain_target(event.get('ki_mult', 1.0), avg_error),
+                        compute_gain_target(event.get('kd_mult', 1.0), avg_error),
+                    ]
                     online_update_gain_scheduler(event['feature_seq'], target_raw, model_gains, optimizer_gains)
 
             event_buffer = [e for e in event_buffer if (now - e['fire_time']).total_seconds() < 86400]

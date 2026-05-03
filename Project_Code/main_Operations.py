@@ -16,6 +16,7 @@ from train_lstm import (
     online_update_threshold,
     online_update_gain_scheduler,
     normalize_features,
+    compute_gain_target,
     INPUT_SIZE, SEQ_LEN, MOISTURE_TARGET, SENSITIVITY_SCALE,
     THRESHOLD_LR, GAIN_LR, LSTM_LR,
 )
@@ -287,6 +288,8 @@ def main(Input_Output):
                     'fire_timestamp':    fire_ts,
                     'feature_seq':       seq_tensor.clone().detach(),
                     'kp_mult':           kp_mult,
+                    'ki_mult':           ki_mult,
+                    'kd_mult':           kd_mult,
                     'waterings_at_fire': waterings_today,   # before increment
                     'is_negative':       False,
                     'moisture_readings': [],
@@ -364,12 +367,11 @@ def main(Input_Output):
 
             g_info = {'loss': 0.0}
             if not event.get('is_negative', False):
-                previous_mult = event.get('kp_mult', 1.0)
-                target_mult   = previous_mult - math.tanh(mean_error / SENSITIVITY_SCALE)
-                target_mult   = max(0.5, min(1.5, target_mult))
-                target_raw    = 1.0 + 2.0 * (target_mult - 1.0)
-                target_raw    = max(0.0, min(2.0, target_raw))
-
+                target_raw = [
+                    compute_gain_target(event.get('kp_mult', 1.0), mean_error),
+                    compute_gain_target(event.get('ki_mult', 1.0), mean_error),
+                    compute_gain_target(event.get('kd_mult', 1.0), mean_error),
+                ]
                 g_info = online_update_gain_scheduler(
                     event['feature_seq'], target_raw,
                     model_gains, optimizer_gains,
@@ -382,7 +384,7 @@ def main(Input_Output):
                 round(mean_error, 4),
                 round(target_prob, 1),
                 round(t_loss, 4),
-                round(target_raw if not event.get('is_negative', False) else 0.0, 3),
+                round(target_raw[0] if not event.get('is_negative', False) else 0.0, 3),
                 round(g_info['loss'], 4),
             ])
             training_log_file.flush()
